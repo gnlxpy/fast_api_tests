@@ -1,8 +1,10 @@
 def hello():
     return print('Hello World!')
 
-def say(msg):
-    if len(msg) < 20 and msg is type(string):
-        return print(msg)
+def say(msg : str) -> bool:
+    if len(msg) < 20:
+        print(msg)
+        return True
     else:
-        return print(f'message is big!')
+        print(f'message is big!')
+        return False
