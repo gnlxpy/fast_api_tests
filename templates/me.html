@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой профиль</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5 w-50">
+        {% if name %}
+        <h1>Добро пожаловать, {{ name }}!</h1>
+        <p>Ваш токен: {{ token }}</p>
+        <form action="/logout" method="post">
+            <button type="submit" class="btn btn-danger">Выйти</button>
+        </form>
+        {% else %}
+        <h1>Привет, незнакомец</h1>
+        <form action="/login" method="post">
+            <button type="submit" class="btn btn-danger">Страница авторизации</button>
+        </form>
+        <div class="alert alert-info mt-3">Необходима авторизация, перейдите на страницу авторизации по кнопке выше</div>
+        {% endif %}
+    </div>
+</body>
+</html>
