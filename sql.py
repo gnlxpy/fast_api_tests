@@ -1,3 +1,4 @@
+import asyncio
 import os
 import datetime
 from dotenv import load_dotenv
@@ -97,6 +98,17 @@ class PgActions:
             else:
                 return result[0]
 
+        async def verified_true(self, email: str):
+            # Составляем SQL-запрос
+            sql_script = f'''
+            UPDATE Users
+            SET verified = TRUE
+            WHERE email = '{email}'
+            RETURNING email;
+            '''
+            result = await sql_execute(sql_script)
+            return result
+
     class Tasks:
         def __init__(self, outer_instance):
             self.outer = outer_instance
@@ -178,9 +190,9 @@ CREATE TABLE IF NOT EXISTS Tasks (
 
 # async def exec():
 #     pg = PgActions()
-#     task_list = {
-#         'description': 'One',
-#     }
-#     s = await pg.tasks.upd('den@ya.ru', 11, {'dt_to': '2025-02-01 12:00'})
+#     s = await pg.users.verified_true('kate@ya.ru')
 #     print(s)
 #     return True
+#
+#
+# asyncio.run(exec())

@@ -1,4 +1,5 @@
 import os
+import random
 import jwt
 from passlib.context import CryptContext
 import datetime
@@ -17,6 +18,14 @@ CLIENT_HOSTS = {}
 pg = PgActions()
 # Контекст для работы с хэшами
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+
+def generate_code(length):
+    result = ''
+    while length != 0:
+        length -= 1
+        result += f'{random.randint(0, 9)}'
+    return result
 
 
 def hash_password(password: str) -> str:
@@ -68,7 +77,7 @@ async def check_clients_dict(client_host: str, path: str) -> None:
             CLIENT_HOSTS[client_host] = 0
 
 
-async def check_token(token: str, type_token: str, client_host: str | None, path: str | None) -> bool:
+async def check_token(token: str, type_token: str, client_host: str | None, path: str | None) -> dict | bool:
     """
     Проверка токена пользователя
     :param token: токен

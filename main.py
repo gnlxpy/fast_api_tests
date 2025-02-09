@@ -1,11 +1,13 @@
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Optional
 import redis.asyncio as redis
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Depends, Cookie, HTTPException, Request, Body, status as fastapi_status
+from fastapi import FastAPI, Form, Depends, Cookie, HTTPException, Request, Body, Path, status as fastapi_status, \
+    UploadFile
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -18,8 +20,10 @@ from starlette.responses import JSONResponse
 from encryption import create_access_token, hash_password, verify_password, check_token
 from models import TaskAdd, Login, Registration, Answer, FormValidationError
 from sql import PgActions, HOST
+from tasks import send_email_task
 
 
+SERVER_URL = 'http://127.0.0.1:8000/'
 ACCESS_TOKEN_EXPIRE_DAYS = 120
 ACCESS_COOKIE_EXPIRE_DAYS = 30
 load_dotenv()
@@ -52,8 +56,7 @@ async def get_user_from_token(request: Request, token: str = Depends(oauth2_sche
     """
     Получаем пользователя из токена и проверяем его.
     """
-    client_host = request.client.host
-    user = await check_token(token, 'bearer', client_host, '/task')
+    user = await check_token(token, 'bearer', request.client.host, '/task')
     if not user:
         raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Неверный токен или несуществующий пользователь")
     return user
@@ -134,11 +137,30 @@ async def handle_registration(request: Request, form: Registration = Form()):
     access_token = create_access_token(
         form.email, 'bearer', expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     )
+    confirm_token = create_access_token(
+        form.email, 'confirm', expires_delta=timedelta(days=1)
+    )
+    send_email_task.delay(form.email, form.username, f'{SERVER_URL}confirm/{confirm_token}')
     # добавляем пользователя в бд
     await pg.users.add(form, password_hashed, access_token)
     # переадресовываем для первого входа в ЛК
     return templates.TemplateResponse('login.html', {'request': request,
                                                      'message': 'Регистрация прошла успешно, войдите для продолжения.'})
+
+
+@app.get('/confirm/{confirm_code}', include_in_schema=False)
+async def confirmation_email(request: Request, confirm_code: str = Path()):
+    user = await check_token(confirm_code, 'confirm', request.client.host, '/confirm')
+    if user:
+        await pg.users.verified_true(user['email'])
+        return {'succes': True}
+    else:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND)
+
+
+@app.get('/verified', include_in_schema=False)
+async def handle_verified(request: Request):
+    return templates.TemplateResponse('verified.html', {'request': request})
 
 
 @app.get('/login', response_class=HTMLResponse, tags=['account'])
@@ -230,6 +252,11 @@ async def task_add(user: dict = Depends(get_user_from_token),
     if not data:
         raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST)
     return Answer(status=True, id=data['id'])
+
+
+@app.post("/uploadfile/", deprecated=True)
+async def create_upload_file(file: UploadFile):
+    pass
 
 
 @app.get('/task', tags=['task'], deprecated=True)
