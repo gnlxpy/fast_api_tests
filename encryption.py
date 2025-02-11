@@ -1,5 +1,6 @@
 import os
 import random
+import string
 import jwt
 from passlib.context import CryptContext
 import datetime
@@ -26,6 +27,10 @@ def generate_code(length):
         length -= 1
         result += f'{random.randint(0, 9)}'
     return result
+
+
+def generate_filename(length: int) -> str:
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
 def hash_password(password: str) -> str:

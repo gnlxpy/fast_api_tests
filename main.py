@@ -1,13 +1,14 @@
 import os
-import subprocess
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import Optional
+from io import BytesIO
+from typing import Optional, Annotated
+from pydantic import Field
 import redis.asyncio as redis
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Depends, Cookie, HTTPException, Request, Body, Path, status as fastapi_status, \
-    UploadFile
+    UploadFile, File
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,24 +18,30 @@ from fastapi.templating import Jinja2Templates
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 from starlette.responses import JSONResponse
-from encryption import create_access_token, hash_password, verify_password, check_token
-from models import TaskAdd, Login, Registration, Answer, FormValidationError
+from encryption import create_access_token, hash_password, verify_password, check_token, generate_filename
+from models import TaskAdd, Login, Registration, Answer, FormValidationError, AnswerUrl, TasksList, SetStatus
+from s3_handler import upload_file, delete_file
 from sql import PgActions, HOST
 from tasks import send_email_task
 
 
-SERVER_URL = 'http://127.0.0.1:8000/'
+load_dotenv()
+
 ACCESS_TOKEN_EXPIRE_DAYS = 120
 ACCESS_COOKIE_EXPIRE_DAYS = 30
-load_dotenv()
+UPLOAD_SIZE = 6000000
+UPLOAD_EXT_TYPES = ('txt', 'jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx')
+
 REDIS_PSW = os.getenv('REDIS_PSW')
+SERVER_URL = os.getenv('SERVER_URL')
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """
     Инициализация Редис для fastapi_limiter
     """
-    redis_connection = redis.from_url(f"redis://default:{REDIS_PSW}@{HOST}:6379/db", encoding="utf8")
+    redis_connection = redis.from_url(f"redis://default:{REDIS_PSW}@{HOST}:6379/0", encoding="utf8")
     await FastAPILimiter.init(redis_connection)
     yield
     await FastAPILimiter.close()
@@ -60,6 +67,20 @@ async def get_user_from_token(request: Request, token: str = Depends(oauth2_sche
     if not user:
         raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Неверный токен или несуществующий пользователь")
     return user
+
+
+async def get_upload(file: UploadFile = File(description='Объект файла (BytesIO)')):
+    # считывание и проверка размера файла
+    file_ext = file.filename.split('.')[1]
+    if file.size > UPLOAD_SIZE:
+        raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Размер файла должен быть меньше 5мб')
+    elif file_ext not in UPLOAD_EXT_TYPES:
+        raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Разрешены только текстовые файлы и изображения')
+    file_content = await file.read()
+    file_object = BytesIO(file_content)
+    # сгенерировать имя файлу
+    new_filename = f'{generate_filename(12)}.{file_ext}'
+    return {'file_object': file_object, 'new_filename': new_filename}
 
 
 @app.exception_handler(429)
@@ -238,7 +259,8 @@ async def logout():
          summary='Добавление задачи',
          response_description='Успешное добавление - возврат статуса и идентификатора')
 async def task_add(user: dict = Depends(get_user_from_token),
-                   item: TaskAdd = Body()) -> Answer:
+                   item: TaskAdd = Body()
+                   ) -> Answer:
     """
     ## Добавление задачи
     Позволяет добавить задачу с полями:
@@ -254,27 +276,117 @@ async def task_add(user: dict = Depends(get_user_from_token),
     return Answer(status=True, id=data['id'])
 
 
-@app.post("/uploadfile/", deprecated=True)
-async def create_upload_file(file: UploadFile):
-    pass
+@app.post('/uploadfile/', tags=['task'], status_code=fastapi_status.HTTP_200_OK,
+          dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+          summary='Загрузка файла',
+          response_description='Успешное добавление - обновление задачи, возврат ссылки на файл')
+async def get_file(user: dict = Depends(get_user_from_token), file_dict = Depends(get_upload),
+                             id: int = Form(description='id задачи к которой необходимо прикрепить файл')) -> AnswerUrl:
+    """
+    ## Добавление файла к задаче
+    Позволяет добавить 1 файл до 5мб и получить ссылку на него:
+        * id - id задачи к которой необходимо прикрепить файл
+        * file - Объект файла (BytesIO)
+    """
+    # проверить наличие задачи с необходимым айди
+    tasks_list = await pg.tasks.get_all(user['email'])
+    tasks_ids = [task['id'] for task in tasks_list if task['file'] in [None, '']]
+    if id not in tasks_ids or len(tasks_ids) == 0:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='id задачи не найден')
+    # выгрузка файла в s3
+    full_new_filename = f't-{id}-{file_dict["new_filename"]}'
+    status = await upload_file(file_dict['file_object'], full_new_filename)
+    if status is False:
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка добавления файла на сервер')
+    # сделать запись ссылки на файл в бд
+    url = f'http://{HOST}:9001/api/v1/buckets/tasksfiles/objects/download?prefix={full_new_filename}'
+    await pg.tasks.upd(user['email'], id, {'file': url})
+    return AnswerUrl(status=True, id=id, url=url)
 
 
-@app.get('/task', tags=['task'], deprecated=True)
-async def task_get_all(user: dict = Depends(get_user_from_token)):
-    pass
+@app.delete('/uploadfile/', tags=['task'], status_code=fastapi_status.HTTP_200_OK,
+            dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+            summary='Удаление файла',
+            response_description='Файл успешно удален')
+async def del_file(user: dict = Depends(get_user_from_token),
+                   id: int = Form(description='id задачи у которой необходимо удалить файл')):
+    """
+    ## Удаление файла задачи
+    Позволяет удалить 1 прикрепленный файл:
+        * id - id задачи у которой необходимо удалить файл
+    """
+    # проверить наличие задачи с необходимым айди
+    task_dict = await pg.tasks.get(id)
+    if task_dict['email'] != user['email']:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
+    if task_dict['file'] is None:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Файл у данной задачи не найден')
+    # получение имени файла из ссылки в БД
+    try:
+        filename = task_dict['file'].split('=')[1]
+    except Exception:
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # операция удаления в s3
+    status = await delete_file(filename)
+    if status is False:
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка удаления файла')
+    # удаление ссылки в БД
+    await pg.tasks.upd(user['email'], id, {'file': ''})
+    return Answer(status=True, id=id)
+
+
+@app.get('/task', tags=['task'], status_code=fastapi_status.HTTP_200_OK,
+            dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+            summary='Получение списка задач',
+            response_description='Успешный запрос')
+async def task_get_all(user: dict = Depends(get_user_from_token)) -> TasksList:
+    """
+    ## Получение списка всех задач
+    """
+    tasks_list = await pg.tasks.get_all(user['email'])
+    return TasksList(status=True, data=tasks_list)
+
+
+@app.delete('/task', tags=['task'], status_code=fastapi_status.HTTP_200_OK,
+            dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+            summary='Удаление задачи',
+            response_description='Успешно удалена')
+async def task_delete(user: dict = Depends(get_user_from_token),
+                      id: int = Body(description='id задачи у которой необходимо удалить файл')):
+    """
+    ## Удаление задачи
+        * id - id задачи которую необходимо удалить
+    """
+    # проверить наличие задачи с необходимым айди
+    task_dict = await pg.tasks.get(id)
+    if task_dict['email'] != user['email']:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
+    # удаление задачи в БД
+    status = await pg.tasks.delete(id)
+    if not status:
+        raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Answer(status=True, id=id)
+
+
+@app.patch('/task/status', tags=['task'], status_code=fastapi_status.HTTP_200_OK,
+            dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+            summary='Обновление статуса',
+            response_description='Статус успешно обновлен')
+async def task_set_status(user: dict = Depends(get_user_from_token), set_status: SetStatus = Body()) -> Answer:
+    """
+    ## Обновление статуса задачи
+        * id - id задачи которую необходимо удалить
+        * status - один из возможных статусов
+    """
+    task_dict = await pg.tasks.get(set_status.id)
+    if task_dict['email'] != user['email']:
+        raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
+    # обновление статуса задачи в БД
+    await pg.tasks.upd(user['email'], set_status.id, {'status': set_status.status})
+    return Answer(status=True, id=set_status.id)
 
 
 @app.post('/task', tags=['task'], deprecated=True)
-async def task_delete(user: dict = Depends(get_user_from_token)):
-    pass
-
-
-@app.patch('/task/setstatus', tags=['task'], deprecated=True)
-async def task_delete(user: dict = Depends(get_user_from_token)):
-    pass
-
-
-@app.patch('/task/update', tags=['task'], deprecated=True)
 async def task_update(user: dict = Depends(get_user_from_token)):
     pass
 

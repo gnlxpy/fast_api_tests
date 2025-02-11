@@ -1,7 +1,7 @@
+from enum import Enum
 from typing import Annotated, Optional
-
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, EmailStr, model_validator
+from pydantic import BaseModel, Field, EmailStr, model_validator, HttpUrl
 import datetime
 import re
 
@@ -87,6 +87,65 @@ class Answer(BaseModel):
                 {
                     'status': True,
                     'id': 113
+                }
+            ]
+        }
+    }
+
+class TasksList(BaseModel):
+    status: Annotated[bool, Field(..., description='Статус')]
+    data: Annotated[Optional[list[dict]] | None, Field(default=None, description='Список задач')]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    'status': True,
+                    'data': [
+                        {}
+                    ]
+                }
+            ]
+        }
+    }
+
+
+class AnswerUrl(Answer):
+    """
+    Модель ответа АПИ (c url)
+    """
+    url: Annotated[HttpUrl, Field(description='Url загруженного файла для скачивания')]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    'status': True,
+                    'id': 113,
+                    'url': 'http://{{ Your Domain }}/api/v1/buckets/tasksfiles/objects/download?prefix={{ File Name }}. {{ File Ext }}'
+                }
+            ]
+        }
+    }
+
+
+class Statuses(Enum):
+    IN_PROGRESS = 'IN_PROGRESS'
+    WAIT = 'WAIT'
+    DONE = 'DONE'
+    ARCHIVE = 'ARCHIVE'
+
+
+class SetStatus(BaseModel):
+    id: Annotated[Optional[int] | None, Field(..., description='id созданной задачи')]
+    status: Annotated[Statuses, Field(..., description='Один из возможных статусов')]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    'id': 113,
+                    'status': 'DONE'
                 }
             ]
         }

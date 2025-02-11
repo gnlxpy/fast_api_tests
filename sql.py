@@ -1,6 +1,8 @@
 import asyncio
 import os
 import datetime
+from binascii import a2b_hex
+
 from dotenv import load_dotenv
 import asyncpg
 import traceback
@@ -140,6 +142,17 @@ class PgActions:
             else:
                 return result
 
+        async def get(self, id: int) -> dict | bool:
+            result = await sql_execute(f'''
+            SELECT *
+            FROM Tasks
+            WHERE id = {id}
+            ''')
+            if len(result) == 0:
+                return False
+            else:
+                return result[0]
+
         async def delete(self, id: int):
             result = await sql_execute(f'''
             DELETE FROM Tasks
@@ -190,9 +203,9 @@ CREATE TABLE IF NOT EXISTS Tasks (
 
 # async def exec():
 #     pg = PgActions()
-#     s = await pg.users.verified_true('kate@ya.ru')
+#     s = await pg.tasks.get_all('')
 #     print(s)
 #     return True
-#
-#
+
+
 # asyncio.run(exec())
