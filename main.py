@@ -48,7 +48,7 @@ async def lifespan(_: FastAPI):
 
 
 # инициализация фастапи
-app = FastAPI(lifespan=lifespan, title='To-Do micro-api', description='Позволяет хранить задачи в облаке. Для регистрации пройдите по ссылке: /registration', version='0.1b')
+app = FastAPI(lifespan=lifespan, title='To-Do mini', description='Позволяет хранить задачи в облаке. Для регистрации пройдите по ссылке: /registration', version='0.1b')
 # Подключение к статическим файлам (например, Bootstrap и стили)
 app.mount('/static', StaticFiles(directory='static'), name='static')
 # Извлечение токена из запросов

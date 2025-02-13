@@ -1,14 +1,12 @@
 import asyncio
 import os
 import datetime
-from binascii import a2b_hex
-
 from dotenv import load_dotenv
 import asyncpg
 import traceback
 from logs import logger
 from models import TaskAdd, Registration
-# import asyncio
+
 
 # локальная загрузка переменных
 load_dotenv()
