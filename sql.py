@@ -4,7 +4,6 @@ import datetime
 from dotenv import load_dotenv
 import asyncpg
 import traceback
-from logs import logger
 from models import TaskAdd, Registration
 
 

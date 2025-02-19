@@ -12,12 +12,12 @@
         {% if name %}
         <h1>Добро пожаловать, {{ name }}!</h1>
         <p>Ваш токен: {{ token }}</p>
-        <form action="/logout" method="post">
+        <form action="/lk/logout" method="post">
             <button type="submit" class="btn btn-danger">Выйти</button>
         </form>
         {% else %}
         <h1>Привет, незнакомец</h1>
-        <form action="/login" method="post">
+        <form action="/lk/login" method="post">
             <button type="submit" class="btn btn-danger">Страница авторизации</button>
         </form>
         <div class="alert alert-info mt-3">Необходима авторизация, перейдите на страницу авторизации по кнопке выше</div>

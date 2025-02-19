@@ -1,6 +1,5 @@
 from enum import Enum
 from typing import Annotated, Optional
-from fastapi import HTTPException
 from pydantic import BaseModel, Field, EmailStr, model_validator, HttpUrl
 import datetime
 import re
