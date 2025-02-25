@@ -2,7 +2,7 @@ import os
 import random
 import string
 import jwt
-from passlib.context import CryptContext
+import bcrypt
 import datetime
 from dotenv import load_dotenv
 from redis_handler import redis_add_key
@@ -18,7 +18,7 @@ CLIENT_HOSTS = {}
 # объект для работы с постгрес
 pg = PgActions()
 # Контекст для работы с хэшами
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+# pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 
 def generate_code(length):
@@ -33,18 +33,22 @@ def generate_filename(length: int) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
-def hash_password(password: str) -> str:
+def hash_password(password: str) -> bytes:
     """
     Создание хэша пароля
     """
-    return pwd_context.hash(password)
+    password = password.encode("utf-8")
+    salt = bcrypt.gensalt()  # Генерация случайной соли
+    hashed_password = bcrypt.hashpw(password, salt)
+    return hashed_password
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password: str, hashed_password: bytes) -> bool:
     """
     Проверка пароля
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    plain_password_bytes = plain_password.encode("utf-8")
+    return bcrypt.checkpw(plain_password_bytes, hashed_password)
 
 
 def create_access_token(email: str, type_token: str, expires_delta: datetime.timedelta | None = None):
@@ -111,3 +115,7 @@ async def check_token(token: str, type_token: str, client_host: str | None, path
     except Exception:
         await check_clients_dict(client_host, path) if client_host is not None else None
         return False
+
+
+if __name__ == '__main__':
+    pass

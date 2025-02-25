@@ -1,5 +1,7 @@
 import smtplib
 import os
+import traceback
+
 from dotenv import load_dotenv
 from email.message import EmailMessage
 
@@ -13,7 +15,7 @@ EMAIL_PSW=os.getenv('EMAIL_PSW')
 def send_email(recipient: str, subject: str, message_body: str) -> bool:
     """
     Отправка емейл
-    :param recipient: емейл отправителя
+    :param recipient: емейл адресата
     :param subject: тема
     :param message_body: тело сообщения
     :return: True | False

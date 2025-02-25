@@ -33,7 +33,7 @@ async def index(request: Request):
     ## Главная страница
     Содержит кнопку регистрация и логин
     """
-    return templates.TemplateResponse('index.html', {'request': request})
+    return templates.TemplateResponse(request=request, name='index.html')
 
 
 @router.get('/registration', response_class=HTMLResponse)
@@ -42,7 +42,7 @@ async def registration(request: Request):
     ## Страница регистрации пользователя
     Содержит форму с Именем, емейлом, паролем
     """
-    return templates.TemplateResponse('registration.html', {'request': request, 'message': None})
+    return templates.TemplateResponse(request=request, name='registration.html', context={'message': None})
 
 
 @router.post('/registration')
@@ -57,7 +57,7 @@ async def handle_registration(request: Request, form: Registration = Form()):
     # проверяем существующих пользователей
     user = await pg.users.get(form.email)
     if user is not False:
-        return templates.TemplateResponse('registration.html', {'request': request, 'message': 'Пользователь уже существует'})
+        return templates.TemplateResponse(request=request, name='registration.html', context={'message': 'Пользователь уже существует'})
     # создаем хэш пароля и токен пользователя
     password_hashed = hash_password(form.password)
     access_token = create_access_token(
@@ -66,12 +66,11 @@ async def handle_registration(request: Request, form: Registration = Form()):
     confirm_token = create_access_token(
         form.email, 'confirm', expires_delta=timedelta(days=1)
     )
-    send_email_task.delay(form.email, form.username, f'{SERVER_URL}confirm/{confirm_token}')
+    send_email_task.delay(form.email, form.username, f'{SERVER_URL}/lk/confirm/{confirm_token}')
     # добавляем пользователя в бд
     await pg.users.add(form, password_hashed, access_token)
     # переадресовываем для первого входа в ЛК
-    return templates.TemplateResponse('login.html', {'request': request,
-                                                     'message': 'Регистрация прошла успешно, войдите для продолжения.'})
+    return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Регистрация прошла успешно, войдите для продолжения.'})
 
 
 @router.get('/confirm/{confirm_code}', include_in_schema=False)
@@ -79,14 +78,14 @@ async def confirmation_email(request: Request, confirm_code: str = Path()):
     user = await check_token(confirm_code, 'confirm', request.client.host, '/confirm')
     if user:
         await pg.users.verified_true(user['email'])
-        return {'succes': True}
+        return RedirectResponse(url='/lk/verified', status_code=303)
     else:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND)
 
 
 @router.get('/verified', include_in_schema=False)
 async def handle_verified(request: Request):
-    return templates.TemplateResponse('verified.html', {'request': request})
+    return templates.TemplateResponse(request=request, name='verified.html')
 
 
 @router.get('/login', response_class=HTMLResponse, tags=['account'])
@@ -139,13 +138,13 @@ async def me(request: Request, user_session: Optional[str] = Cookie(None)):
         # в остальных случаем удаляем неверные куки
         user = await check_token(user_session, 'cookie', None, None)
         if type(user) is dict:
-            return templates.TemplateResponse('me.html', {'request': request, 'name': user['name'], 'token': user['token']})
+            return templates.TemplateResponse(request=request, name='me.html', context={'name': user['name'], 'token': user['token']})
         else:
             response = RedirectResponse(url='/lk', status_code=303)
             response.delete_cookie('user_session')
             return response
     else:
-        return templates.TemplateResponse('me.html', {'request': request, 'name': None, 'token': None})
+        return templates.TemplateResponse(request=request, name='me.html', context={'name': None, 'token': None})
 
 
 @router.post('/logout', response_class=HTMLResponse)

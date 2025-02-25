@@ -15,7 +15,7 @@ POSTGRES_USER = os.getenv('POSTGRES_USER')
 POSTGRES_PSW = os.getenv('POSTGRES_PSW')
 
 
-async def sql_execute(sql_script: str, data: any = None) -> list | bool:
+async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
     """
     Функция для выполнения скриптов в бд
     :param sql_script: скрипт
@@ -27,7 +27,6 @@ async def sql_execute(sql_script: str, data: any = None) -> list | bool:
         conn = await asyncpg.connect(user=POSTGRES_USER, password=POSTGRES_PSW,
                                  database='postgres', host=HOST)
     except Exception:
-        logger.critical(f'Error sql connection \n{traceback.format_exc()}')
         return False
     # выполнение скрипта с данными в запросе и без
     try:
@@ -38,7 +37,6 @@ async def sql_execute(sql_script: str, data: any = None) -> list | bool:
         select_dicts = [dict(x) for x in select]
         return select_dicts
     except Exception:
-        logger.critical(f'Error sql script \n{traceback.format_exc()}')
         return False
     # закрытие соединения
     finally:
@@ -55,7 +53,7 @@ class PgActions:
         def __init__(self, outer_instance):
             self.outer = outer_instance
 
-        async def add(self, form: Registration, password_hashed, access_token) -> bool:
+        async def add(self, form: Registration, password_hashed: bytes, access_token: str) -> bool:
             """
             Добавление пользователя
             :param form: объект с данными из формы регистрации
@@ -175,27 +173,6 @@ class PgActions:
             '''
             result = await sql_execute(sql_script, (email, id))
             return result
-
-
-async def create_table():
-    sql = '''
-CREATE TABLE IF NOT EXISTS Tasks (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description VARCHAR(255),
-    status VARCHAR(255) NOT NULL,
-    level INT,
-    dt_to TIMESTAMP,
-    dt TIMESTAMP NOT NULL,
-    CONSTRAINT fk_email FOREIGN KEY (email) REFERENCES Users (email)
-);
-    '''
-    conn = await asyncpg.connect(user=POSTGRES_USER, password=POSTGRES_PSW,
-                                 database='postgres', host=HOST)
-    await conn.execute(sql)
-    await conn.close()
-    return True
 
 
 # async def exec():

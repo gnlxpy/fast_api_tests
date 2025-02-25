@@ -50,7 +50,7 @@ async def get_upload(file: UploadFile = File(description='Объект файл�
 
 
 @router.put('/', status_code=fastapi_status.HTTP_201_CREATED,
-         dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+         # dependencies=[Depends(RateLimiter(times=5, minutes=1))],
          summary='Добавление задачи',
          response_description='Успешное добавление - возврат статуса и идентификатора')
 async def task_add(user: dict = Depends(get_user_from_token),
@@ -142,7 +142,7 @@ async def task_get_all(user: dict = Depends(get_user_from_token)) -> TasksList:
     return TasksList(status=True, data=tasks_list)
 
 
-@router.delete('/', status_code=fastapi_status.HTTP_200_OK,
+@router.post('/delete', status_code=fastapi_status.HTTP_200_OK,
             dependencies=[Depends(RateLimiter(times=5, minutes=1))],
             summary='Удаление задачи',
             response_description='Успешно удалена')
