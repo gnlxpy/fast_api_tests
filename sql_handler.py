@@ -1,7 +1,12 @@
 import datetime
+import traceback
 import asyncpg
+import asyncio
 from models import TaskAdd, Registration
 from config import settings
+
+
+SETTINGS = settings
 
 
 async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
@@ -13,9 +18,10 @@ async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
     """
     # инициализация бд
     try:
-        conn = await asyncpg.connect(user=settings.POSTGRES_USER, password=settings.POSTGRES_PSW,
-                                 database='postgres', host=settings.HOST)
+        conn = await asyncpg.connect(user=SETTINGS.POSTGRES_USER, password=SETTINGS.POSTGRES_PSW,
+                                 database=SETTINGS.POSTGRES_DB, host=SETTINGS.HOST)
     except Exception:
+        traceback.print_exc()
         return False
     # выполнение скрипта с данными в запросе и без
     try:
@@ -24,8 +30,10 @@ async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
         else:
             select = await conn.fetch(sql_script)
         select_dicts = [dict(x) for x in select]
+        print('select_dicts', select_dicts)
         return select_dicts
     except Exception:
+        traceback.print_exc()
         return False
     # закрытие соединения
     finally:
@@ -52,7 +60,8 @@ class PgActions:
             """
             result = await sql_execute(f'''
             INSERT INTO Users (email, psw_hash, name, token, status, dt)
-            VALUES ($1, $2, $3, $4, $5, $6);
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING email;
             ''', (
                 form.email,
                 password_hashed,
@@ -162,3 +171,20 @@ class PgActions:
             '''
             result = await sql_execute(sql_script, (email, id))
             return result
+
+
+async def add_user():
+    pg = PgActions()
+    form = Registration(
+        username='Test',
+        password='Test123*',
+        confirm_password='Test123*',
+        email='test@test.com'
+    )
+    response = await pg.users.add(form, b'hashed_password', 'access_token')
+    print('users', response)
+    # assert response == True
+
+
+if __name__ == '__main__':
+    asyncio.run(add_user())

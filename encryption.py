@@ -5,7 +5,7 @@ import bcrypt
 import datetime
 from dotenv import load_dotenv
 from redis_handler import redis_add_key
-from sql import PgActions
+from sql_handler import PgActions
 from config import settings
 
 

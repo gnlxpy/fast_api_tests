@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi_limiter.depends import RateLimiter
 from encryption import check_token, generate_filename
 from models import Answer, TaskAdd, AnswerUrl, TasksList, SetStatus
-from sql import PgActions, HOST
+from sql_handler import PgActions, HOST
 from io import BytesIO
 from s3_handler import upload_file, delete_file
 

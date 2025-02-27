@@ -3,15 +3,14 @@ from pydantic import IPvAnyAddress, EmailStr, HttpUrl
 
 
 class Settings(BaseSettings):
-    HOST: IPvAnyAddress
+    HOST: str
     SECRET_KEY: str
     POSTGRES_USER: str
     POSTGRES_PSW: str
+    POSTGRES_DB: str
     REDIS_PSW: str
-    EMAIL_USER: EmailStr
+    EMAIL_USER: str
     EMAIL_PSW: str
-    MINIO_USER: str
-    MINIO_PSW: str
     S3_ACCESS: str
     S3_SECRET: str
     BUCKET_NAME: str

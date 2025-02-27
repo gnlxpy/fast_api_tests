@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from encryption import hash_password, create_access_token, check_token, verify_password
 from models import Registration, Login
-from sql import PgActions
+from sql_handler import PgActions
 from tasks import send_email_task
 
 
