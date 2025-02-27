@@ -12,6 +12,7 @@ from fastapi_limiter import FastAPILimiter
 from models import FormValidationError
 from routers.lk import templates
 from config import settings
+from sql_handler_v2 import init_pg
 
 
 @asynccontextmanager
@@ -32,6 +33,8 @@ app.mount('/static', StaticFiles(directory='static'), name='static')
 # подключение роутеров
 app.include_router(lk.router)
 app.include_router(task.router)
+# инициализация бд
+init_pg()
 
 
 @app.middleware("http")

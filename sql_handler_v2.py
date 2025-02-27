@@ -1,0 +1,145 @@
+import datetime
+import asyncpg
+from models import TaskAdd, Registration
+from config import settings
+
+
+SETTINGS = settings
+
+
+async def init_pg():
+    """
+    Инициализация БД Постгрес
+    :return: глобальная переменная с соединением
+    """
+    global pool
+    pool = await asyncpg.create_pool(settings.POSTGRES_URL, min_size=1, max_size=5)
+
+
+async def close_pg():
+    """
+    Закрытие соединения
+    """
+    await pool.close()
+
+
+def prepare_data_to_upd(data: dict) -> str:
+    """
+    Преобразование словаря в текст для выгрузки в БД
+    """
+    parts = []
+    for k, v in data.items():
+        value = f"'{v}'" if isinstance(v, str) else str(v)
+        parts.append(f"{k} = {value}")
+    return ", ".join(parts)
+
+
+class Pg:
+
+    # Операции над пользователями
+    class Users:
+
+        @staticmethod
+        async def add(form: Registration, password_hashed: bytes, access_token: str) -> bool:
+            async with pool.acquire() as conn:
+                result = await conn.fetch(
+                    '''
+                    INSERT INTO Users (email, psw_hash, name, token, status, dt)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    RETURNING email;
+                    ''',
+                    form.email,
+                    password_hashed,
+                    form.username,
+                    access_token,
+                    'NEW',
+                    datetime.datetime.now().replace(microsecond=0)
+                )
+                return True if result else False
+
+        @staticmethod
+        async def get_all() -> list[dict]:
+            async with pool.acquire() as conn:
+                return await conn.fetch('SELECT * FROM Users')
+
+        @staticmethod
+        async def get(email: str) -> dict | bool:
+            async with pool.acquire() as conn:
+                result = await conn.fetch(
+                    f'''
+                    SELECT *
+                    FROM Users
+                    WHERE email = $1
+                    ''', email)
+                return result[0]
+
+        @staticmethod
+        async def verified_true(email: str):
+            async with pool.acquire() as conn:
+                result = await conn.fetch(
+                    '''
+                    UPDATE Users
+                    SET verified = TRUE
+                    WHERE email = $1
+                    RETURNING email;
+                    ''',
+                    email
+                )
+                return True if result else False
+
+    # Операции над задачами
+    class Tasks:
+
+        @staticmethod
+        async def add(email: str, task: TaskAdd) -> list:
+            async with pool.acquire() as conn:
+                result = await conn.fetch(
+                    '''
+                    INSERT INTO Tasks (email, title, description, status, level, dt_to, dt)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING id;
+                    ''',
+                    email, task.title, task.description, 'WAIT', task.level, task.dt_to,
+                    datetime.datetime.now().replace(microsecond=0)
+                )
+                return result[0]
+
+        @staticmethod
+        async def get_all(email: str):
+            async with pool.acquire() as conn:
+                result = await conn.fetch('SELECT * FROM Tasks WHERE email = $1', email)
+                return result
+
+        @staticmethod
+        async def get(id: int):
+            async with pool.acquire() as conn:
+                result = await conn.fetch('SELECT * FROM Tasks WHERE id = $1', id)
+                return result[0]
+
+        @staticmethod
+        async def delete(id: int):
+            async with pool.acquire() as conn:
+                result = await conn.fetch(
+                    '''
+                    DELETE FROM Tasks
+                    WHERE id = $1
+                    RETURNING id
+                    ''',
+                    id
+                )
+                return result[0]
+
+        @staticmethod
+        async def upd(email: str, id: int, data: dict):
+            async with pool.acquire() as conn:
+                set_str = prepare_data_to_upd(data)
+                result = await conn.fetch(
+                    '''
+                    UPDATE Tasks
+                    SET $1
+                    WHERE email = $2 and id = $3
+                    RETURNING id;
+                    ''',
+                    set_str, email, id
+                )
+                return result[0]

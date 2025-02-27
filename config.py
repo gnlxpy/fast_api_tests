@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     def REDIS_URL(self):
         return f"redis://default:{self.REDIS_PSW}@{self.HOST}:6379/0"
 
+    @property
+    def POSTGRES_URL(self):
+        return f'postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PSW}@{self.HOST}:5432/{self.POSTGRES_DB}'
+
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
 

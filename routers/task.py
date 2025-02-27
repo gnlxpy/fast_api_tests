@@ -1,20 +1,17 @@
-import os
 from fastapi import Form, Depends, HTTPException, Request, Body, status as fastapi_status, UploadFile, File, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_limiter.depends import RateLimiter
 from encryption import check_token, generate_filename
 from models import Answer, TaskAdd, AnswerUrl, TasksList, SetStatus
-from sql_handler import PgActions, HOST
 from io import BytesIO
 from s3_handler import upload_file, delete_file
+from config import settings
+from sql_handler_v2 import Pg
 
 
-UPLOAD_SIZE = int(os.getenv('UPLOAD_SIZE'))
 UPLOAD_EXT_TYPES = ('txt', 'jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx')
 
 
-# объект бд постгрес
-pg = PgActions()
 # Извлечение токена из запросов
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
@@ -38,7 +35,7 @@ async def get_user_from_token(request: Request, token: str = Depends(oauth2_sche
 async def get_upload(file: UploadFile = File(description='Объект файла (BytesIO)')):
     # считывание и проверка размера файла
     file_ext = file.filename.split('.')[1]
-    if file.size > UPLOAD_SIZE:
+    if file.size > settings.UPLOAD_SIZE:
         raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Размер файла должен быть меньше 5мб')
     elif file_ext not in UPLOAD_EXT_TYPES:
         raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Разрешены только текстовые файлы и изображения')
@@ -50,7 +47,7 @@ async def get_upload(file: UploadFile = File(description='Объект файл�
 
 
 @router.put('/', status_code=fastapi_status.HTTP_201_CREATED,
-         # dependencies=[Depends(RateLimiter(times=5, minutes=1))],
+         dependencies=[Depends(RateLimiter(times=5, minutes=1))],
          summary='Добавление задачи',
          response_description='Успешное добавление - возврат статуса и идентификатора')
 async def task_add(user: dict = Depends(get_user_from_token),
@@ -65,7 +62,7 @@ async def task_add(user: dict = Depends(get_user_from_token),
        * dt_to - Дата дедлайна
     """
     # добавление информации по задаче в бд
-    data = await pg.tasks.add(user['email'], item)
+    data = await Pg.Tasks.add(user['email'], item)
     if not data:
         raise HTTPException(status_code=fastapi_status.HTTP_400_BAD_REQUEST)
     return Answer(status=True, id=data['id'])
@@ -84,7 +81,7 @@ async def get_file(user: dict = Depends(get_user_from_token), file_dict = Depend
         * file - Объект файла (BytesIO)
     """
     # проверить наличие задачи с необходимым айди
-    tasks_list = await pg.tasks.get_all(user['email'])
+    tasks_list = await Pg.Tasks.get_all(user['email'])
     tasks_ids = [task['id'] for task in tasks_list if task['file'] in [None, '']]
     if id not in tasks_ids or len(tasks_ids) == 0:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='id задачи не найден')
@@ -94,8 +91,8 @@ async def get_file(user: dict = Depends(get_user_from_token), file_dict = Depend
     if status is False:
         raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка добавления файла на сервер')
     # сделать запись ссылки на файл в бд
-    url = f'http://{HOST}:9001/api/v1/buckets/tasksfiles/objects/download?prefix={full_new_filename}'
-    await pg.tasks.upd(user['email'], id, {'file': url})
+    url = f'http://{settings.HOST}:9001/api/v1/buckets/tasksfiles/objects/download?prefix={full_new_filename}'
+    await Pg.Tasks.upd(user['email'], id, {'file': url})
     return AnswerUrl(status=True, id=id, url=url)
 
 
@@ -111,7 +108,7 @@ async def del_file(user: dict = Depends(get_user_from_token),
         * id - id задачи у которой необходимо удалить файл
     """
     # проверить наличие задачи с необходимым айди
-    task_dict = await pg.tasks.get(id)
+    task_dict = await Pg.Tasks.get(id)
     if task_dict['email'] != user['email']:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
     if task_dict['file'] is None:
@@ -126,7 +123,7 @@ async def del_file(user: dict = Depends(get_user_from_token),
     if status is False:
         raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка удаления файла')
     # удаление ссылки в БД
-    await pg.tasks.upd(user['email'], id, {'file': ''})
+    await Pg.Tasks.upd(user['email'], id, {'file': ''})
     return Answer(status=True, id=id)
 
 
@@ -138,7 +135,7 @@ async def task_get_all(user: dict = Depends(get_user_from_token)) -> TasksList:
     """
     ## Получение списка всех задач
     """
-    tasks_list = await pg.tasks.get_all(user['email'])
+    tasks_list = await Pg.Tasks.get_all(user['email'])
     return TasksList(status=True, data=tasks_list)
 
 
@@ -153,11 +150,11 @@ async def task_delete(user: dict = Depends(get_user_from_token),
         * id - id задачи которую необходимо удалить
     """
     # проверить наличие задачи с необходимым айди
-    task_dict = await pg.tasks.get(id)
+    task_dict = await Pg.Tasks.get(id)
     if task_dict['email'] != user['email']:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
     # удаление задачи в БД
-    status = await pg.tasks.delete(id)
+    status = await Pg.Tasks.delete(id)
     if not status:
         raise HTTPException(status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR)
     return Answer(status=True, id=id)
@@ -173,11 +170,11 @@ async def task_set_status(user: dict = Depends(get_user_from_token), set_status:
         * id - id задачи которую необходимо удалить
         * status - один из возможных статусов
     """
-    task_dict = await pg.tasks.get(set_status.id)
+    task_dict = await Pg.Tasks.get(set_status.id)
     if task_dict['email'] != user['email']:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND, detail='Такая задача не найдена')
     # обновление статуса задачи в БД
-    await pg.tasks.upd(user['email'], set_status.id, {'status': set_status.status})
+    await Pg.Tasks.upd(user['email'], set_status.id, {'status': set_status.status})
     return Answer(status=True, id=set_status.id)
 
 

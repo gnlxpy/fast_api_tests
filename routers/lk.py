@@ -1,4 +1,4 @@
-import os
+from config import settings
 from datetime import timedelta
 from fastapi import Form, Cookie, HTTPException, Request, Path, status as fastapi_status, APIRouter
 from typing import Optional
@@ -6,13 +6,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from encryption import hash_password, create_access_token, check_token, verify_password
 from models import Registration, Login
-from sql_handler import PgActions
+from sql_handler_v2 import Pg
 from tasks import send_email_task
-
-
-ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv('ACCESS_TOKEN_EXPIRE_DAYS'))
-ACCESS_COOKIE_EXPIRE_DAYS = int(os.getenv('ACCESS_COOKIE_EXPIRE_DAYS'))
-SERVER_URL = os.getenv('SERVER_URL')
 
 
 router = APIRouter(
@@ -23,8 +18,6 @@ router = APIRouter(
 
 # Подключение к папке с шаблонами
 templates = Jinja2Templates(directory='templates')
-# объект бд постгрес
-pg = PgActions()
 
 
 @router.get('/', response_class=HTMLResponse)
@@ -54,21 +47,22 @@ async def handle_registration(request: Request, form: Registration = Form()):
     Пользователь добавляется в бд
     Редирект на страницу логина
     """
+    email = str(form.email)
     # проверяем существующих пользователей
-    user = await pg.users.get(form.email)
+    user = await Pg.Users.get(email)
     if user is not False:
         return templates.TemplateResponse(request=request, name='registration.html', context={'message': 'Пользователь уже существует'})
     # создаем хэш пароля и токен пользователя
     password_hashed = hash_password(form.password)
     access_token = create_access_token(
-        form.email, 'bearer', expires_delta=timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+        email, 'bearer', expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
     )
     confirm_token = create_access_token(
-        form.email, 'confirm', expires_delta=timedelta(days=1)
+        email, 'confirm', expires_delta=timedelta(days=1)
     )
-    send_email_task.delay(form.email, form.username, f'{SERVER_URL}/lk/confirm/{confirm_token}')
+    send_email_task.delay(email, form.username, f'{settings.SERVER_URL}/lk/confirm/{confirm_token}')
     # добавляем пользователя в бд
-    await pg.users.add(form, password_hashed, access_token)
+    await Pg.Users.add(form, password_hashed, access_token)
     # переадресовываем для первого входа в ЛК
     return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Регистрация прошла успешно, войдите для продолжения.'})
 
@@ -77,7 +71,7 @@ async def handle_registration(request: Request, form: Registration = Form()):
 async def confirmation_email(request: Request, confirm_code: str = Path()):
     user = await check_token(confirm_code, 'confirm', request.client.host, '/confirm')
     if user:
-        await pg.users.verified_true(user['email'])
+        await Pg.Users.verified_true(user['email'])
         return RedirectResponse(url='/lk/verified', status_code=303)
     else:
         raise HTTPException(status_code=fastapi_status.HTTP_404_NOT_FOUND)
@@ -105,8 +99,9 @@ async def handle_login(request: Request, form: Login = Form()):
     Проверка введенного пароля с хэшем в бд
     В случае удачной проверки добавляются куки и делается редирект в ЛК
     """
+    email = str(form.email)
     # ищем пользователя в бд по почте
-    user = await pg.users.get(form.email)
+    user = await Pg.Users.get(email)
     # если такая почта есть, то делаем проверку хэша пароля
     if user is not None:
         verify_psw_hash = verify_password(form.password, user['psw_hash'])
@@ -118,11 +113,11 @@ async def handle_login(request: Request, form: Login = Form()):
         return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Введены неверные данные'})
     else:
         access_cookie = create_access_token(
-            form.email, 'cookie', expires_delta=timedelta(days=ACCESS_COOKIE_EXPIRE_DAYS)
+            email, 'cookie', expires_delta=timedelta(days=settings.ACCESS_COOKIE_EXPIRE_DAYS)
         )
         # Установка куки
         response = RedirectResponse(url='/lk/me', status_code=303)
-        response.set_cookie(key='user_session', value=access_cookie, httponly=True, max_age=ACCESS_COOKIE_EXPIRE_DAYS * 24 * 60 * 60, samesite='strict')
+        response.set_cookie(key='user_session', value=access_cookie, httponly=True, max_age=settings.ACCESS_COOKIE_EXPIRE_DAYS * 24 * 60 * 60, samesite='strict')
         return response
 
 
