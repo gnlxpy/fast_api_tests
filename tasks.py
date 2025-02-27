@@ -1,17 +1,10 @@
-import os
 from celery import Celery
-from dotenv import load_dotenv
 from email_handler import send_email
-from sql import HOST
-
-
-load_dotenv()
-
-REDIS_PSW = os.getenv('REDIS_PSW')
+from config import settings
 
 
 # Конфигурация Celery
-celery_app = Celery('tasks', broker=f"redis://default:{REDIS_PSW}@{HOST}:6379/1", encoding="utf8")
+celery_app = Celery('tasks', broker=settings.REDIS_URL, encoding="utf8")
 
 @celery_app.task
 def send_email_task(recipient: str, username: str, url_confirm: str) -> bool:

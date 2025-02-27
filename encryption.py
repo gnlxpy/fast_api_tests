@@ -1,4 +1,3 @@
-import os
 import random
 import string
 import jwt
@@ -7,18 +6,15 @@ import datetime
 from dotenv import load_dotenv
 from redis_handler import redis_add_key
 from sql import PgActions
+from config import settings
 
-# локальная загрузка переменных
-load_dotenv()
+
 # константы для хеширования паролей
-SECRET_KEY = os.getenv('SECRET_KEY')
 ALGORITHM = 'HS256'
 # временный словарь для отслеживания ip пользователей
 CLIENT_HOSTS = {}
 # объект для работы с постгрес
 pg = PgActions()
-# Контекст для работы с хэшами
-# pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 
 def generate_code(length):
@@ -67,7 +63,7 @@ def create_access_token(email: str, type_token: str, expires_delta: datetime.tim
         'type_token': type_token,
         'exp': expire
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 async def check_clients_dict(client_host: str, path: str) -> None:
@@ -97,7 +93,7 @@ async def check_token(token: str, type_token: str, client_host: str | None, path
     """
     # получаем данные пользователя из токена
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
     except Exception:
         # добавляем в список пользователей с ошибкой
         await check_clients_dict(client_host, path) if client_host is not None else None

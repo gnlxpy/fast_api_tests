@@ -1,10 +1,8 @@
-import os
 import subprocess
 from contextlib import asynccontextmanager
 from routers import lk, task
 import redis.asyncio as redis
 import uvicorn
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -13,14 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_limiter import FastAPILimiter
 from models import FormValidationError
 from routers.lk import templates
-from sql import HOST
-
-
-load_dotenv()
-
-
-REDIS_PSW = os.getenv('REDIS_PSW')
-SERVER_URL = os.getenv('SERVER_URL')
+from config import settings
 
 
 @asynccontextmanager
@@ -28,7 +19,7 @@ async def lifespan(_: FastAPI):
     """
     Инициализация Редис для fastapi_limiter
     """
-    redis_connection = redis.from_url(f"redis://default:{REDIS_PSW}@{HOST}:6379/0", encoding="utf8")
+    redis_connection = redis.from_url(settings.REDIS_URL, encoding="utf8")
     await FastAPILimiter.init(redis_connection)
     yield
     await FastAPILimiter.close()

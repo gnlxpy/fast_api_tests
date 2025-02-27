@@ -1,18 +1,7 @@
-import asyncio
-import os
 import datetime
-from dotenv import load_dotenv
 import asyncpg
-import traceback
 from models import TaskAdd, Registration
-
-
-# локальная загрузка переменных
-load_dotenv()
-
-HOST = os.getenv('HOST')
-POSTGRES_USER = os.getenv('POSTGRES_USER')
-POSTGRES_PSW = os.getenv('POSTGRES_PSW')
+from config import settings
 
 
 async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
@@ -24,8 +13,8 @@ async def sql_execute(sql_script: str, data: any = None) -> list | bool | None:
     """
     # инициализация бд
     try:
-        conn = await asyncpg.connect(user=POSTGRES_USER, password=POSTGRES_PSW,
-                                 database='postgres', host=HOST)
+        conn = await asyncpg.connect(user=settings.POSTGRES_USER, password=settings.POSTGRES_PSW,
+                                 database='postgres', host=settings.HOST)
     except Exception:
         return False
     # выполнение скрипта с данными в запросе и без
@@ -173,13 +162,3 @@ class PgActions:
             '''
             result = await sql_execute(sql_script, (email, id))
             return result
-
-
-# async def exec():
-#     pg = PgActions()
-#     s = await pg.tasks.get_all('')
-#     print(s)
-#     return True
-
-
-# asyncio.run(exec())

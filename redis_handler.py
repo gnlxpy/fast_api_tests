@@ -1,17 +1,11 @@
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
-import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
-REDIS_PSW = os.getenv('REDIS_PSW')
-HOST = os.getenv('HOST')
+from config import settings
 
 
 @asynccontextmanager
 async def redis_conn():
-    connection = redis.from_url(f"redis://default:{REDIS_PSW}@{HOST}:6379/0", encoding="utf8", decode_responses=True)
+    connection = redis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
     try:
         yield connection
     finally:
