@@ -1,7 +1,7 @@
 from fastapi import Form, Depends, HTTPException, Request, Body, status as fastapi_status, UploadFile, File, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_limiter.depends import RateLimiter
-from encryption import check_token, generate_filename
+from encryption import check_token, generate_filename, TokenTypes
 from models import Answer, TaskAdd, AnswerUrl, TasksList, SetStatus
 from io import BytesIO
 from s3_handler import upload_file, delete_file
@@ -26,7 +26,7 @@ async def get_user_from_token(request: Request, token: str = Depends(oauth2_sche
     """
     Получаем пользователя из токена и проверяем его.
     """
-    user = await check_token(token, 'bearer', request.client.host, '/task')
+    user = await check_token(token, TokenTypes.BEARER, request.client.host, '/task')
     if not user:
         raise HTTPException(status_code=fastapi_status.HTTP_403_FORBIDDEN, detail="Неверный токен или несуществующий пользователь")
     return user

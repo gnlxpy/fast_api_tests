@@ -53,6 +53,10 @@ class Login(BaseModel):
 class TaskAdd(BaseModel):
     """
     Модель добавления задачи
+    -title
+    -description
+    -level
+    -dt_to
     """
     title: Annotated[str, Field(..., min_length=3, max_length=128, description='Название задачи')]
     description: Annotated[Optional[str], Field(default=None, min_length=3, max_length=255, description='Описание задачи')]

@@ -3,18 +3,22 @@ import string
 import jwt
 import bcrypt
 import datetime
-from dotenv import load_dotenv
 from redis_handler import redis_add_key
-from sql_handler import PgActions
+from sql_handler_v2 import Pg
 from config import settings
+from enum import Enum
+
+
+class TokenTypes(Enum):
+    BEARER = {'name': 'bearer', 'exp': settings.ACCESS_TOKEN_EXPIRE_DAYS}
+    COOKIE = {'name': 'cookie', 'exp': settings.ACCESS_COOKIE_EXPIRE_DAYS}
+    CONFIRM = {'name': 'confirm', 'exp': 1}
 
 
 # константы для хеширования паролей
 ALGORITHM = 'HS256'
 # временный словарь для отслеживания ip пользователей
 CLIENT_HOSTS = {}
-# объект для работы с постгрес
-pg = PgActions()
 
 
 def generate_code(length):
@@ -47,7 +51,7 @@ def verify_password(plain_password: str, hashed_password: bytes) -> bool:
     return bcrypt.checkpw(plain_password_bytes, hashed_password)
 
 
-def create_access_token(email: str, type_token: str, expires_delta: datetime.timedelta | None = None):
+def create_access_token(email: str, type_token: TokenTypes):
     """
     Создание токена
     :param email: почта пользователя
@@ -55,12 +59,13 @@ def create_access_token(email: str, type_token: str, expires_delta: datetime.tim
     :param expires_delta: время действия токена (дни)
     :return: зашифрованный JWT-токен
     """
+    expires_delta = datetime.timedelta(days=type_token.value['exp'])
     # время жизни токена
     expire = datetime.datetime.now() + expires_delta
     # данные внутри токена
     payload = {
         'email': email,
-        'type_token': type_token,
+        'type_token': type_token.value['name'],
         'exp': expire
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
@@ -82,7 +87,7 @@ async def check_clients_dict(client_host: str, path: str) -> None:
             CLIENT_HOSTS[client_host] = 0
 
 
-async def check_token(token: str, type_token: str, client_host: str | None, path: str | None) -> dict | bool:
+async def check_token(token: str, type_token: TokenTypes, client_host: str | None, path: str | None) -> dict | bool:
     """
     Проверка токена пользователя
     :param token: токен
@@ -102,11 +107,11 @@ async def check_token(token: str, type_token: str, client_host: str | None, path
         # определяем тип, почту, срок действия токена
         type_, email, exp = payload.get('type_token'), payload.get('email'), payload.get('exp')
         # сверяем тип и срок действия
-        if type_token != type_ or exp < datetime.datetime.now().timestamp():
+        if type_token.value['name'] != type_ or exp < datetime.datetime.now().timestamp():
             await check_clients_dict(client_host, path) if client_host is not None else None
             return False
         # определяем и возвращаем пользователя
-        user = await pg.users.get(email)
+        user = await Pg.Users.get(email)
         return user
     except Exception:
         await check_clients_dict(client_host, path) if client_host is not None else None

@@ -4,7 +4,7 @@ from fastapi import Form, Cookie, HTTPException, Request, Path, status as fastap
 from typing import Optional
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from encryption import hash_password, create_access_token, check_token, verify_password
+from encryption import hash_password, create_access_token, check_token, verify_password, TokenTypes
 from models import Registration, Login
 from sql_handler_v2 import Pg
 from tasks import send_email_task
@@ -54,12 +54,8 @@ async def handle_registration(request: Request, form: Registration = Form()):
         return templates.TemplateResponse(request=request, name='registration.html', context={'message': 'Пользователь уже существует'})
     # создаем хэш пароля и токен пользователя
     password_hashed = hash_password(form.password)
-    access_token = create_access_token(
-        email, 'bearer', expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
-    )
-    confirm_token = create_access_token(
-        email, 'confirm', expires_delta=timedelta(days=1)
-    )
+    access_token = create_access_token(email, TokenTypes.BEARER)
+    confirm_token = create_access_token(email, TokenTypes.CONFIRM)
     send_email_task.delay(email, form.username, f'{settings.SERVER_URL}/lk/confirm/{confirm_token}')
     # добавляем пользователя в бд
     await Pg.Users.add(form, password_hashed, access_token)
@@ -113,7 +109,7 @@ async def handle_login(request: Request, form: Login = Form()):
         return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Введены неверные данные'})
     else:
         access_cookie = create_access_token(
-            email, 'cookie', expires_delta=timedelta(days=settings.ACCESS_COOKIE_EXPIRE_DAYS)
+            email, TokenTypes.COOKIE
         )
         # Установка куки
         response = RedirectResponse(url='/lk/me', status_code=303)
@@ -131,7 +127,7 @@ async def me(request: Request, user_session: Optional[str] = Cookie(None)):
     if user_session:
         # находим пользователя по кукам, если находится отображаем ЛК
         # в остальных случаем удаляем неверные куки
-        user = await check_token(user_session, 'cookie', None, None)
+        user = await check_token(user_session, TokenTypes.COOKIE, None, None)
         if type(user) is dict:
             return templates.TemplateResponse(request=request, name='me.html', context={'name': user['name'], 'token': user['token']})
         else:

@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import asyncpg
 from models import TaskAdd, Registration
@@ -14,6 +15,7 @@ async def init_pg():
     """
     global pool
     pool = await asyncpg.create_pool(settings.POSTGRES_URL, min_size=1, max_size=5)
+    return pool
 
 
 async def close_pg():
@@ -143,3 +145,16 @@ class Pg:
                     set_str, email, id
                 )
                 return result[0]
+
+    class Dev:
+
+        @staticmethod
+        async def truncate(table: str) -> bool:
+            async with pool.acquire() as conn:
+                await conn.execute(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE;')
+                result = await conn.fetchval(f'SELECT COUNT(*) FROM "{table}";')
+                return True if result == 0 else False
+
+
+if __name__ == '__main__':
+    pass
