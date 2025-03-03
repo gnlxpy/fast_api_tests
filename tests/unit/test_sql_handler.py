@@ -56,6 +56,16 @@ def task():
     )
 
 
+@pytest_asyncio.fixture(scope='session')
+def task_update():
+    return TaskAdd(
+        title='Test1 updated',
+        description='Test description updated',
+        level=2,
+        dt_to=datetime.datetime(2025, 6, 1, 18, 30)
+    )
+
+
 class TestUsers:
 
     async def test_add(self, user):
@@ -101,3 +111,15 @@ class TestTasks:
         assert len(r) > 0
         assert r[0]['email'] == str(user.form.email)
         assert r[0]['title'] == str(task.title)
+
+    async  def test_upd(self, user, task_update):
+        r = await Pg.Tasks.upd(str(user.form.email), 1, {'description': task_update.description})
+        assert r == True
+        r = await Pg.Tasks.get(1)
+        assert r['description'] == str(task_update.description)
+
+    async def test_delete(self):
+        r = await Pg.Tasks.delete(1)
+        assert r == True
+        r = await Pg.Tasks.get(1)
+        assert r == False

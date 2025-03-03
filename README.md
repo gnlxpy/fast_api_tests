@@ -21,4 +21,6 @@ fast_api_tests.py/
 |-- sql.py                 # БД Postgresql на чистом SQL (asyncpg)
 |-- tasks.py               # очередь задач (Celery)
 |-- email_handler.py       # вспомогательные функции проекта по отправке почты (smtplib)
+|-- tests/                 # тестирование с pytest
+|   |-- unit/              # юнит-тесты
 ```
