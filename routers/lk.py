@@ -56,6 +56,7 @@ async def handle_registration(request: Request, form: Registration = Form()):
     password_hashed = hash_password(form.password)
     access_token = create_access_token(email, TokenTypes.BEARER)
     confirm_token = create_access_token(email, TokenTypes.CONFIRM)
+    # отправка почты
     send_email_task.delay(email, form.username, f'{settings.SERVER_URL}/lk/confirm/{confirm_token}')
     # добавляем пользователя в бд
     await Pg.Users.add(form, password_hashed, access_token)
@@ -101,20 +102,14 @@ async def handle_login(request: Request, form: Login = Form()):
     # если такая почта есть, то делаем проверку хэша пароля
     if user:
         verify_psw_hash = verify_password(form.password, user['psw_hash'])
-    else:
-        verify_psw_hash = False
-    # если хэш не прошел проверку отображаем уведомление
-    # в остальных случаем выставляем куки для сессии
-    if verify_psw_hash is False:
-        return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Введены неверные данные'})
-    else:
-        access_cookie = create_access_token(
-            email, TokenTypes.COOKIE
-        )
-        # Установка куки
-        response = RedirectResponse(url='/lk/me', status_code=303)
-        response.set_cookie(key='user_session', value=access_cookie, httponly=True, max_age=settings.ACCESS_COOKIE_EXPIRE_DAYS * 24 * 60 * 60, samesite='strict')
-        return response
+        if verify_psw_hash:
+            access_cookie = create_access_token(email, TokenTypes.COOKIE)
+            # Установка куки
+            response = RedirectResponse(url='/lk/me', status_code=303)
+            response.set_cookie(key='user_session', value=access_cookie, httponly=True,
+                                max_age=settings.ACCESS_COOKIE_EXPIRE_DAYS * 24 * 60 * 60, samesite='strict')
+            return response
+    return templates.TemplateResponse(request=request, name='login.html', context={'message': 'Введены неверные данные'})
 
 
 @router.get('/me', response_class=HTMLResponse)
