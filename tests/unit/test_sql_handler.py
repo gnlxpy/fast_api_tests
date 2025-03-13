@@ -1,11 +1,8 @@
 import datetime
-import pytest
 import pytest_asyncio
 from pydantic import BaseModel
-from sql_handler_v2 import Pg, init_pg, close_pg
+from sql_handler_v2 import Pg
 from models import Registration, TaskAdd
-from encryption import hash_password, create_access_token, TokenTypes
-from config import settings
 
 
 class User(BaseModel):
@@ -15,38 +12,7 @@ class User(BaseModel):
     cookie: dict
 
 
-@pytest_asyncio.fixture(scope='session', autouse=True)
-async def setup_db():
-    assert settings.POSTGRES_DB == 'test_postgres'
-    await init_pg()
-    yield
-    r = await Pg.Dev.truncate('users')
-    assert r == True
-    r = await Pg.Dev.truncate('tasks')
-    assert r == True
-    await close_pg()
-
-
-@pytest_asyncio.fixture(scope='session')
-def user():
-    form = Registration(
-        username='Test',
-        password='Test123*',
-        confirm_password='Test123*',
-        email='test@test.com'
-    )
-    password_hashed = hash_password(form.password)
-    access_token = create_access_token(str(form.email), TokenTypes.BEARER)
-    cookie = create_access_token(str(form.email), TokenTypes.COOKIE)
-    return User(
-        form=form,
-        password_hashed=password_hashed,
-        access_token=access_token,
-        cookie={'user_session': cookie}
-    )
-
-
-@pytest_asyncio.fixture(scope='session')
+@pytest_asyncio.fixture(scope='module')
 def task():
     return TaskAdd(
         title='Test1',
@@ -56,7 +22,7 @@ def task():
     )
 
 
-@pytest_asyncio.fixture(scope='session')
+@pytest_asyncio.fixture(scope='module')
 def task_update():
     return TaskAdd(
         title='Test1 updated',

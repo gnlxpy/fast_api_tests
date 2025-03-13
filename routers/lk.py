@@ -50,7 +50,7 @@ async def handle_registration(request: Request, form: Registration = Form()):
     email = str(form.email)
     # проверяем существующих пользователей
     user = await Pg.Users.get(email)
-    if user is not False:
+    if user:
         return templates.TemplateResponse(request=request, name='registration.html', context={'message': 'Пользователь уже существует'})
     # создаем хэш пароля и токен пользователя
     password_hashed = hash_password(form.password)
@@ -99,7 +99,7 @@ async def handle_login(request: Request, form: Login = Form()):
     # ищем пользователя в бд по почте
     user = await Pg.Users.get(email)
     # если такая почта есть, то делаем проверку хэша пароля
-    if user is not None:
+    if user:
         verify_psw_hash = verify_password(form.password, user['psw_hash'])
     else:
         verify_psw_hash = False
@@ -128,14 +128,9 @@ async def me(request: Request, user_session: Optional[str] = Cookie(None)):
         # находим пользователя по кукам, если находится отображаем ЛК
         # в остальных случаем удаляем неверные куки
         user = await check_token(user_session, TokenTypes.COOKIE, None, None)
-        if type(user) is dict:
+        if user:
             return templates.TemplateResponse(request=request, name='me.html', context={'name': user['name'], 'token': user['token']})
-        else:
-            response = RedirectResponse(url='/lk', status_code=303)
-            response.delete_cookie('user_session')
-            return response
-    else:
-        return templates.TemplateResponse(request=request, name='me.html', context={'name': None, 'token': None})
+    return templates.TemplateResponse(request=request, name='me.html', context={'name': None, 'token': None})
 
 
 @router.post('/logout', response_class=HTMLResponse)

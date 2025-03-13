@@ -12,7 +12,6 @@ from fastapi_limiter import FastAPILimiter
 from models import FormValidationError
 from routers.lk import templates
 from config import settings
-from sql_handler_v2 import init_pg, close_pg
 
 
 @asynccontextmanager
@@ -22,10 +21,8 @@ async def lifespan(_: FastAPI):
     """
     redis_connection = redis.from_url(settings.REDIS_URL, encoding="utf8")
     await FastAPILimiter.init(redis_connection)
-    await init_pg()
     yield
     await FastAPILimiter.close()
-    await close_pg()
 
 
 # инициализация фастапи
