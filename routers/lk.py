@@ -66,7 +66,7 @@ async def handle_registration(request: Request, form: Registration = Form()):
 
 @router.get('/confirm/{confirm_code}', include_in_schema=False)
 async def confirmation_email(request: Request, confirm_code: str = Path()):
-    user = await check_token(confirm_code, 'confirm', request.client.host, '/confirm')
+    user = await check_token(confirm_code, TokenTypes.CONFIRM, request.client.host, '/confirm')
     if user:
         await Pg.Users.verified_true(user['email'])
         return RedirectResponse(url='/lk/verified', status_code=303)

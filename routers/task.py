@@ -36,7 +36,7 @@ async def get_upload(file: UploadFile = File(description='Объект файл�
     # считывание и проверка размера файла
     file_ext = file.filename.split('.')[1]
     if file.size > settings.UPLOAD_SIZE:
-        raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Размер файла должен быть меньше 5мб')
+        raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Размер файла должен быть меньше 6мб')
     elif file_ext not in UPLOAD_EXT_TYPES:
         raise HTTPException(status_code=fastapi_status.HTTP_406_NOT_ACCEPTABLE, detail='Разрешены только текстовые файлы и изображения')
     file_content = await file.read()
@@ -46,7 +46,7 @@ async def get_upload(file: UploadFile = File(description='Объект файл�
     return {'file_object': file_object, 'new_filename': new_filename}
 
 
-@router.put('/', status_code=fastapi_status.HTTP_201_CREATED,
+@router.post('/', status_code=fastapi_status.HTTP_201_CREATED,
          dependencies=[Depends(RateLimiter(times=5, minutes=1))],
          summary='Добавление задачи',
          response_description='Успешное добавление - возврат статуса и идентификатора')
@@ -139,7 +139,7 @@ async def task_get_all(user: dict = Depends(get_user_from_token)) -> TasksList:
     return TasksList(status=True, data=tasks_list)
 
 
-@router.post('/delete', status_code=fastapi_status.HTTP_200_OK,
+@router.delete('/', status_code=fastapi_status.HTTP_200_OK,
             dependencies=[Depends(RateLimiter(times=5, minutes=1))],
             summary='Удаление задачи',
             response_description='Успешно удалена')
@@ -160,7 +160,7 @@ async def task_delete(user: dict = Depends(get_user_from_token),
     return Answer(status=True, id=id)
 
 
-@router.patch('/status', status_code=fastapi_status.HTTP_200_OK,
+@router.patch('/', status_code=fastapi_status.HTTP_200_OK,
             dependencies=[Depends(RateLimiter(times=5, minutes=1))],
             summary='Обновление статуса',
             response_description='Статус успешно обновлен')
@@ -176,8 +176,3 @@ async def task_set_status(user: dict = Depends(get_user_from_token), set_status:
     # обновление статуса задачи в БД
     await Pg.Tasks.upd(user['email'], set_status.id, {'status': set_status.status})
     return Answer(status=True, id=set_status.id)
-
-
-@router.post('/', deprecated=True)
-async def task_update():
-    pass
